@@ -1,0 +1,34 @@
+services:
+  workbuddy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # 可选构建加速参数（中国大陆环境推荐取消注释或传参）
+        # GOPROXY: "https://goproxy.cn,direct"
+        # PIP_INDEX_URL: "https://pypi.tuna.tsinghua.edu.cn/simple"
+        # DEBIAN_MIRROR: "mirrors.aliyun.com"
+        GOPROXY: ""
+        PIP_INDEX_URL: ""
+        DEBIAN_MIRROR: ""
+    image: workbuddy-all-in-one:latest
+    container_name: workbuddy
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Shanghai
+      # 首次启动管理员密码（留空则随机生成并打印在容器日志中）
+      - WB_ADMIN_PASSWORD=${WB_ADMIN_PASSWORD:-}
+      # 信任反代前置服务（如 Nginx / 1Panel 等）写入的真实来源 IP
+      - WB_TRUST_PROXY=1
+      # 生产环境隐藏 /docs 接口文档（设为 1 则开启）
+      - WB_ENABLE_DOCS=0
+    ports:
+      # 映射管理面板与 API 统一服务端口
+      # 访问控制台: http://<IP>:7864
+      # 下游 OpenAI SDK: http://<IP>:7864/v1
+      - "${PORT:-7864}:7864"
+    volumes:
+      # 持久化数据：管理端数据库、用量统计、用户数据与运行时配置
+      - ./data:/app/data
+      # 账号凭据目录：保存扫码添加的账号 JSON 文件
+      - ./auths:/app/auths

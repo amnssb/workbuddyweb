@@ -1,0 +1,35 @@
+# syntax=docker/dockerfile:1
+# 独立构建：WorkBuddy2API 上游核心
+FROM golang:1.23-alpine AS build
+
+ARG GOPROXY=""
+ENV GOPROXY=${GOPROXY:-https://proxy.golang.org,direct}
+
+WORKDIR /src
+COPY upstream/go.mod upstream/go.sum ./
+RUN go mod download
+
+COPY upstream/ .
+RUN mkdir -p /out \
+ && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/wb2api ./cmd/server \
+ && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/signin_bin ./cmd/signin \
+ && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/login ./cmd/login \
+ && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/credit ./cmd/credit \
+ && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/trial_bin ./cmd/trial \
+ && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/activity_bin ./cmd/activity
+
+FROM alpine:3.20
+RUN apk add --no-cache wget ca-certificates tzdata python3 bash curl \
+ && adduser -D -u 10001 app \
+ && mkdir -p /app/auths /app/data \
+ && chown -R app:app /app
+
+WORKDIR /app
+COPY --from=build /out/* /app/
+COPY upstream/*.sh /app/
+RUN sed -i 's/\r$//' /app/*.sh 2>/dev/null || true \
+ && chmod +x /app/*.sh /app/wb2api /app/login /app/credit /app/signin_bin /app/trial_bin /app/activity_bin
+
+USER app
+EXPOSE 7863
+ENTRYPOINT ["/app/wb2api", "-config", "/app/config.json"]

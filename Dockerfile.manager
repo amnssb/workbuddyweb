@@ -1,0 +1,53 @@
+# syntax=docker/dockerfile:1
+# 独立构建：WorkBuddy Manager 管理控制台
+FROM python:3.12-slim
+
+ARG DEBIAN_MIRROR=""
+ARG PIP_INDEX_URL=""
+
+RUN set -eu; \
+    if [ -n "${DEBIAN_MIRROR}" ]; then \
+        sed -i "s|deb.debian.org|${DEBIAN_MIRROR}|g" /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+        sed -i "s|deb.debian.org|${DEBIAN_MIRROR}|g" /etc/apt/sources.list 2>/dev/null || true; \
+    fi; \
+    apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        ca-certificates \
+        tzdata \
+        bash \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY server/requirements.txt /tmp/requirements.txt
+RUN set -eu; \
+    pip_install() { \
+        pip install --no-cache-dir ${1:+--index-url="$1"} -r /tmp/requirements.txt; \
+    }; \
+    if [ -n "${PIP_INDEX_URL}" ]; then \
+        pip_install "${PIP_INDEX_URL}"; \
+    elif ! pip_install ""; then \
+        pip_install "https://pypi.tuna.tsinghua.edu.cn/simple"; \
+    fi; \
+    rm -f /tmp/requirements.txt
+
+COPY server/ /app/server/
+COPY web/out/ /app/web/out/
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    TZ=Asia/Shanghai \
+    WB_RUN_MODE=docker \
+    WB_MANAGER_HOST=0.0.0.0 \
+    WB_MANAGER_PORT=7864 \
+    WB_INSTALL_DIR=/app \
+    WB_DATA_DIR=/app/data \
+    WB_STATIC_DIR=/app/web/out
+
+VOLUME ["/app/data"]
+EXPOSE 7864
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:7864/api/healthz || exit 1
+
+ENTRYPOINT ["uvicorn", "server.main:app", "--host", "0.0.0.0", "--port", "7864"]

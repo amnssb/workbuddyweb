@@ -1,0 +1,50 @@
+# ==============================================================================
+# WorkBuddy 双容器微服务部署模式 (workbuddy2api + workbuddy-manager)
+# 使用方式：docker compose -f docker-compose.separate.yml up -d
+# ==============================================================================
+services:
+  workbuddy2api:
+    build:
+      context: .
+      dockerfile: Dockerfile.wb2api
+    image: workbuddy2api:latest
+    container_name: workbuddy2api
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Shanghai
+    volumes:
+      - ./auths:/app/auths
+      - ./data/config.json:/app/config.json
+      - ./data:/app/data
+    networks:
+      - wb-net
+
+  workbuddy-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile.manager
+    image: workbuddy-manager:latest
+    container_name: workbuddy-manager
+    restart: unless-stopped
+    depends_on:
+      - workbuddy2api
+    environment:
+      - TZ=Asia/Shanghai
+      - WB_ADMIN_PASSWORD=${WB_ADMIN_PASSWORD:-}
+      - WB2API_BASE=http://workbuddy2api:7863
+      - WB_AUTH_DIR=/opt/workbuddy2api/auths
+      - WB_UPSTREAM_CONFIG=/opt/workbuddy2api/config.json
+      - WB_TRUST_PROXY=1
+    ports:
+      - "${PORT:-7864}:7864"
+    volumes:
+      - ./data:/app/data
+      - ./auths:/opt/workbuddy2api/auths
+      - ./data/config.json:/opt/workbuddy2api/config.json
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - wb-net
+
+networks:
+  wb-net:
+    driver: bridge
