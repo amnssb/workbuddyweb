@@ -24,6 +24,7 @@ with open('$CONFIG_FILE', 'r', encoding='utf-8') as f:
 cfg['api_key'] = '$RAND_KEY'
 cfg['auth_dir'] = '/app/auths'
 cfg['state_file'] = '/app/data/state.json'
+cfg['listen'] = '0.0.0.0:7863'
 with open('$CONFIG_FILE', 'w', encoding='utf-8') as f:
     json.dump(cfg, f, indent=2, ensure_ascii=False)
 "
@@ -47,10 +48,12 @@ export WB2API_KEY="$UPSTREAM_KEY"
 echo "🔄 正在启动上游网关核心 (workbuddy2api)..."
 /app/scripts/start-upstream.sh
 
-# 等待上游健康检查响应 (最多 10 秒)
+# 等待上游健康检查响应（支持 200 OK 或 503 空池正常响应，最多 10 秒）
 READY=0
+HTTP_STATUS=""
 for i in {1..20}; do
-    if curl -s -f http://127.0.0.1:7863/healthz >/dev/null 2>&1; then
+    HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:7863/healthz 2>/dev/null || echo "000")
+    if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "503" ]; then
         READY=1
         break
     fi
@@ -58,20 +61,21 @@ for i in {1..20}; do
 done
 
 if [ "$READY" -eq 1 ]; then
-    echo "✅ 上游网关已就绪 (127.0.0.1:7863)"
+    echo "✅ 上游网关已就绪 (127.0.0.1:7863, HTTP $HTTP_STATUS)"
 else
-    echo "⚠️ 上游网关启动较慢或异常，请检查 /app/data/server.err.log"
+    echo "⚠️ 上游网关启动未响应，最新日志："
+    tail -n 25 /app/data/server.err.log 2>/dev/null || true
 fi
 
 # 4. 信号优雅停机处理
 cleanup() {
     echo ""
     echo "🛑 收到终止信号，正在优雅关闭所有服务..."
-    /app/scripts/stop-upstream.sh || true
-    if [ -n "$UVICORN_PID" ]; then
+    if [ -n "$UVICORN_PID" ] && kill -0 "$UVICORN_PID" 2>/dev/null; then
         kill -TERM "$UVICORN_PID" 2>/dev/null || true
         wait "$UVICORN_PID" 2>/dev/null || true
     fi
+    /app/scripts/stop-upstream.sh || true
     echo "👋 服务已完全停止"
     exit 0
 }
@@ -87,5 +91,7 @@ echo " 📂 凭证目录 (账号存储): /app/auths"
 echo " 💾 数据目录 (数据库/日志): /app/data"
 echo "================================================================="
 
-# 5. 启动 WorkBuddy Manager 管理面板与反代网关
-exec uvicorn server.main:app --host "$HOST" --port "$PORT"
+# 5. 启动 WorkBuddy Manager 管理面板并监听终止信号
+uvicorn server.main:app --host "$HOST" --port "$PORT" &
+UVICORN_PID=$!
+wait "$UVICORN_PID"

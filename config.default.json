@@ -1,5 +1,5 @@
 {
-  "listen": "127.0.0.1:7863",
+  "listen": "0.0.0.0:7863",
   "api_key": "auto_generated_key",
   "auth_dir": "/app/auths",
   "state_file": "/app/data/state.json",

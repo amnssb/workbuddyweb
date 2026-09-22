@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
+import asyncio
 import logging
 
 from . import config, db, security
@@ -20,6 +21,25 @@ from .routers import (
 from .services import renew, tasklog, taskrun
 
 logger = logging.getLogger(__name__)
+
+
+async def _upstream_watchdog() -> None:
+    """在 native 模式下守护上游进程：若掉线或崩溃则自动拉起自愈。"""
+    if config.WB2API_MODE != 'native':
+        return
+    while True:
+        try:
+            await asyncio.sleep(15)
+            async with config.http_client(5, connect=2) as client:
+                resp = await client.get(f'{config.WB2API_BASE}/healthz')
+                if resp.status_code in (200, 503):
+                    continue
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            logger.warning('检测到上游网关未就绪或连接断开，正在尝试自愈拉起...')
+            from .services import reload
+            await reload.restart_now()
 
 
 @asynccontextmanager
@@ -37,9 +57,11 @@ async def lifespan(app: FastAPI):
     # token 自动续期（issue #40）：上游只在「保活时刻」与「有流量时」刷新，
     # 长期闲置的账号会一路走到过期。这里按剩余寿命巡检补齐那个空档。
     renew.start_scheduler()
+    watchdog = asyncio.create_task(_upstream_watchdog())
     try:
         yield
     finally:
+        watchdog.cancel()
         tasklog.stop_collector()
         taskrun.stop_scheduler()
         renew.stop_scheduler()

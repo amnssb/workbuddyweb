@@ -184,5 +184,12 @@ def http_client(timeout, *, connect: float | None = None):
         tmo = httpx.Timeout(timeout)
     kwargs = {'timeout': tmo, 'trust_env': False}
     if HTTP_PROXY:
-        kwargs['proxy'] = HTTP_PROXY
+        mounts = {
+            'all://127.0.0.1': httpx.AsyncHTTPTransport(),
+            'all://localhost': httpx.AsyncHTTPTransport(),
+            'all://': httpx.AsyncHTTPTransport(proxy=HTTP_PROXY),
+        }
+        if WB2API_CONTAINER:
+            mounts[f'all://{WB2API_CONTAINER}'] = httpx.AsyncHTTPTransport()
+        kwargs['mounts'] = mounts
     return httpx.AsyncClient(**kwargs)
