@@ -27,6 +27,9 @@ RUN apk add --no-cache wget ca-certificates tzdata python3 bash curl \
 WORKDIR /app
 COPY --from=build /out/* /app/
 COPY upstream/*.sh /app/
+# 注入上游任务脚本：独立部署时面板靠 `docker cp workbuddy2api:/app/scripts/.`
+# 提取一键执行的 task_runner.py（见 server/services/taskrun.extract_scripts）
+COPY upstream/scripts/ /app/scripts/
 RUN sed -i 's/\r$//' /app/*.sh 2>/dev/null || true \
  && chmod +x /app/*.sh /app/wb2api /app/login /app/credit /app/signin_bin /app/trial_bin /app/activity_bin
 

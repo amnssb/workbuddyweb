@@ -96,14 +96,21 @@ _task: asyncio.Task | None = None
 
 
 def _host_script() -> Path | None:
-    """宿主机挂载目录里的脚本（`<上游目录>/scripts/task_runner.py`），没有则 None。
+    """宿主机挂载目录或镜像内打包的任务脚本，没有则 None。
 
-    这条路径适用于**源码部署 / 完整挂载**的形态：上游目录是宿主机上的 git 仓库，
-    scripts/ 就在那里。
+    一条路径适用于**源码部署 / 完整挂载**：`<上游目录>/scripts/` 是宿主机上的
+    git 仓库里的 scripts/，脚本就在那里。
+    另一条适用于**镜像部署**（all-in-one / manager 镜像）：构建时把
+    `upstream/scripts/` 打包进镜像的 `<仓库根>/upstream/scripts/`（见各 Dockerfile）。
+    容器里这个目录**本来就带** task_runner.py，于是一键执行不再依赖 docker——
+    不挂 docker.sock 也能用（原来那条 `docker cp` 路径要挂 socket + 容器名正确）。
     """
     from . import updater  # 复用既有的上游目录推断，避免两处口径不一
-    p = updater._upstream_dir() / 'scripts' / 'task_runner.py'
-    return p if p.is_file() else None
+    for base in (updater._upstream_dir(), config.ROOT / 'upstream'):
+        p = base / 'scripts' / 'task_runner.py'
+        if p.is_file():
+            return p
+    return None
 
 
 def _extract_dir() -> Path:

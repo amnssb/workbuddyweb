@@ -67,6 +67,10 @@ COPY --from=upstream-builder /out/* /app/bin/
 COPY server/ /app/server/
 COPY web/out/ /app/web/out/
 
+# 注入上游任务脚本（一键执行调用的 scripts/task_runner.py 等）
+# 放 <仓库根>/upstream/scripts/：taskrun._host_script() 会在没有 docker 时照这里找
+COPY upstream/scripts/ /app/upstream/scripts/
+
 # 注入配置与启停脚本
 COPY config.default.json /app/config.default.json
 COPY scripts/ /app/scripts/

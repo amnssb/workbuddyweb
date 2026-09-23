@@ -251,25 +251,33 @@ class ScriptExtractionTest(unittest.TestCase):
                 returncode = 1; stdout = ''; stderr = 'No such container'
             return R()
 
-        with mock.patch('subprocess.run', side_effect=_fail):
+        # 固定走「容器提取」这条路径：镜像内已打包脚本（源码 checkout 里
+        # config.ROOT/upstream/scripts 就带着 task_runner.py）会让 _host_script()
+        # 直接命中而根本不碰 docker —— 那不测冷却；本用例测的就是 docker 提取失败
+        # 的冷却，所以要挡住主机/打包路径。
+        with mock.patch.object(taskrun, '_host_script', return_value=None), \
+             mock.patch('subprocess.run', side_effect=_fail):
             for _ in range(5):
                 taskrun.available()
         self.assertEqual(calls['n'], 1, f'冷却没生效，试了 {calls["n"]} 次')
 
         # 冷却过去后允许再试（不能永久放弃）
         taskrun._last_extract_failure['at'] = time.time() - 61
-        with mock.patch('subprocess.run', side_effect=_fail):
+        with mock.patch.object(taskrun, '_host_script', return_value=None), \
+             mock.patch('subprocess.run', side_effect=_fail):
             taskrun.available()
         self.assertEqual(calls['n'], 2, '冷却过后应允许再试')
 
     def test_successful_extract_resets_cooldown(self) -> None:
         """成功要清掉失败标记，免得下一次因冷却被跳过。"""
-        with mock.patch('subprocess.run', side_effect=self._fake_cp(rc=1)):
+        with mock.patch.object(taskrun, '_host_script', return_value=None), \
+             mock.patch('subprocess.run', side_effect=self._fake_cp(rc=1)):
             taskrun.available()
         self.assertNotEqual(taskrun._last_extract_failure['at'], 0.0)
 
         taskrun._last_extract_failure['at'] = time.time() - 61
-        with mock.patch('subprocess.run', side_effect=self._fake_cp()), \
+        with mock.patch.object(taskrun, '_host_script', return_value=None), \
+             mock.patch('subprocess.run', side_effect=self._fake_cp()), \
              mock.patch.object(taskrun, '_upstream_image_id', return_value='img1'):
             taskrun.available()
         self.assertEqual(taskrun._last_extract_failure['at'], 0.0,
@@ -516,7 +524,11 @@ class EventLoopResponsivenessTest(unittest.TestCase):
                     await asyncio.sleep(0.05)
 
             hb = asyncio.create_task(beat())
-            with mock.patch('subprocess.run', side_effect=self._slow_docker(delay)):
+            # 固定走「容器提取」路径：镜像内已打包脚本会让 _host_script() 直接命中、
+            # 根本不调 docker —— 那样 available() 秒回，数不出「阻塞」；这几条测的
+            # 就是 docker 提取（慢）时事件循环不能被冻住，所以要挡住主机/打包路径。
+            with mock.patch.object(taskrun, '_host_script', return_value=None), \
+                 mock.patch('subprocess.run', side_effect=self._slow_docker(delay)):
                 await coro_factory()
             stop.set()
             await hb
