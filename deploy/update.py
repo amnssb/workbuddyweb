@@ -46,6 +46,9 @@ RELEASE_SIGNER_ID = os.environ.get('WB_RELEASE_SIGNER') or 'release-signing'
 # 导入时固化（测试与部署都按「设环境 → 导入」的口径使用）
 SKIP_SIGNATURE = (os.environ.get('WB_SKIP_SIGNATURE') or '').strip() == '1'
 _PLACEHOLDER_MARK = 'AAAA_REPLACE_ME_WITH_YOUR_REAL_PUBLIC_KEY'
+# 运行形态：显式值在**导入时固化**（deploy 脚本按「设环境→导入」加载）；
+# 'auto' 保留到运行时探测（便于测试 mock 探测点）。
+_RUN_MODE = (os.environ.get('WB_RUN_MODE') or 'auto').strip().lower()
 
 # 更新包体积下限：小于它多半是把 404/错误页当成了包
 _MIN_PKG_BYTES = 100_000
@@ -97,11 +100,10 @@ def download(url: str, dest: Path, rep) -> None:
 
 
 def in_container() -> bool:
-    """运行形态判定：显式配置优先，否则探测（与管理端 updater.py 同口径）。"""
-    mode = (os.environ.get('WB_RUN_MODE') or 'auto').strip().lower()
-    if mode in ('docker', 'container'):
+    """运行形态判定：显式配置（导入时固化）优先，否则运行时探测。"""
+    if _RUN_MODE in ('docker', 'container'):
         return True
-    if mode in ('systemd', 'host'):
+    if _RUN_MODE in ('systemd', 'host'):
         return False
     if Path('/.dockerenv').exists():
         return True
@@ -515,6 +517,16 @@ def update_upstream(rep) -> None:
             '请在宿主机仓库目录执行：git pull && docker compose up -d --build'
         )
 
+    # 先探测 compose：拿不到就不做无谓的 git 操作，直接给出可执行的修法。
+    # 旧版把探测放最后，容器里两个都没有时已经 git pull 完才失败，报错不可读。
+    compose = _compose_cmd(rep)
+    if compose is None:
+        raise RuntimeError(
+            'docker compose 不可用：环境里既没有 docker compose（v2 插件）也没有 '
+            'docker-compose（v1），无法重建容器。请在镜像/宿主机安装 compose 插件'
+            '（见 Dockerfile），或在宿主机仓库目录手动执行 docker compose up -d --build'
+        )
+
     missing = _missing_copy_sources()
     if missing:
         raise RuntimeError(
@@ -548,13 +560,6 @@ def update_upstream(rep) -> None:
     _, sha = run(['git', 'rev-parse', 'HEAD'], cwd=UPSTREAM_DIR, check=False)
     rep.log(f'上游代码已更新到 {(sha or "").strip()[:8]}')
 
-    compose = _compose_cmd(rep)
-    if compose is None:
-        raise RuntimeError(
-            'docker compose 不可用：环境里既没有 docker compose（v2 插件）也没有 '
-            'docker-compose（v1）。请在镜像/宿主机安装 compose 插件（见 Dockerfile），'
-            '或在宿主机仓库目录手动执行 docker compose up -d --build 完成更新'
-        )
     run(compose + ['up', '-d', '--build'], cwd=UPSTREAM_DIR, rep=rep)
     wait_health(rep)
 
