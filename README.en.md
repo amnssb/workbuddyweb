@@ -35,7 +35,9 @@ The original upstream projects are independent:
 - Full-featured single container: Go gateway + Python/Next.js console exposed on one port (`:7864`);
 - No Docker socket required: the console manages the upstream engine via an internal supervisor;
 - Auto initialization on first start, with pre-built static frontend assets;
-- WeChat/QQ QR-code account onboarding and automated daily tasks.
+- WeChat/QQ QR-code account onboarding and automated daily tasks;
+- Single-repository updates: both manager and upstream follow this repository (`amnssb/workbuddyweb`), one-click upgrade from the web panel with signature-verified release packages;
+- Non-root execution: container runs as `app:10001` user with pre-configured directory permissions to reduce privilege escalation risk.
 
 ---
 
@@ -113,8 +115,14 @@ Open `http://<server-ip>:7864` and log in with `admin` and the initial password.
 
 ### 3. Create and distribute API keys
 1. Go to **API Keys**;
-2. Click **Create Key** and configure region (CN / Global), IP allow-list, model allow-list and token quota;
+2. Click **Create Key** and configure region (CN / Global), IP allow-list, model allow-list, token quota and credit limit (either limit rejects requests when exceeded);
 3. The generated `wbk_xxxxxxxx` key is the Bearer Token for downstream clients.
+
+### 4. Version upgrade
+Both manager and upstream follow this repository's releases. Use the **System Update** page in the web panel for one-click upgrade:
+- **Manager update**: downloads the release package (tar.gz + .sig), verifies the signature against `deploy/release-signing-key.pub`, then hot-swaps backend and frontend assets and restarts the service;
+- **Upstream update**: pulls the latest code in the repository workspace and rebuilds the container via docker compose;
+- The signing public key lives in `deploy/release-signing-key.pub`; the private key is kept offline. Auto-update is refused when the public key is not configured (secure by default).
 
 ---
 
@@ -200,15 +208,33 @@ workbuddyweb/
 
 ## Environment Variables (`.env`)
 
+### Basic Configuration
+
 | Variable | Default | Description |
 |---|---|---|
 | `PORT` | `7864` | Host port exposed to the outside |
 | `WB_ADMIN_PASSWORD` | *(empty)* | Initial admin password; auto-generated if empty |
 | `WB_TRUST_PROXY` | `1` | Trust real client IP forwarded by reverse proxy |
 | `WB_ENABLE_DOCS` | `0` | Expose `/docs` OpenAPI docs in production |
+| `WB_SESSION_DAYS` | `1` | Session validity period (days), sliding renewal |
 | `TZ` | `Asia/Shanghai` | Container timezone |
-| `GOPROXY` | *(empty)* | Go proxy for image build |
-| `PIP_INDEX_URL` | *(empty)* | PyPI mirror for image build |
+
+### Gateway and Audit
+
+| Variable | Default | Description |
+|---|---|---|
+| `WB_GATEWAY_MAX_BODY_MB` | `32` | Gateway request body limit (MB), sufficient for common long-context and attachments |
+| `WB_GATEWAY_RATE_PER_MIN` | `120` | Maximum requests per IP per minute (`0` = unlimited) |
+| `WB_AUDIT_ALL_ACCESS` | `0` | Set to `1` to enable full access logging (default logs only abnormal access) |
+| `WB_UPSTREAM_TIMEOUT` | `120` | Upstream request timeout (seconds), adjustable for long inference scenarios |
+
+### Image Build Acceleration
+
+| Variable | Default | Description |
+|---|---|---|
+| `GOPROXY` | *(empty)* | Go proxy for image build, e.g. `https://goproxy.cn,direct` for China |
+| `PIP_INDEX_URL` | *(empty)* | PyPI mirror for image build, e.g. `https://pypi.tuna.tsinghua.edu.cn/simple` for China |
+| `DEBIAN_MIRROR` | *(empty)* | Debian mirror for image build, e.g. `mirrors.aliyun.com` for China |
 
 ---
 

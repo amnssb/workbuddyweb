@@ -35,7 +35,9 @@
 - 🛠️ **全功能单容器集成**：Go 上游网关与 Python/Next.js 管理后台融合为一个容器，仅暴露一个统一端口（默认 `:7864`）；
 - 🔒 **无须 Docker 套接字**：管理端通过内部守护进程管理上游引擎，秒级平滑热重启，无需挂载 `/var/run/docker.sock`；
 - ⚡ **开箱即用自动初始化**：首启全自动生成内部 `config.json` 与高强度随机密钥，内置前端静态编译产物，免装 Node.js；
-- 📱 **完整扫码加号与任务管理**：直接在 Web 面板微信/QQ 扫码添加账号，自动每日签到、猫猫旅行、领奖与日志持久化。
+- 📱 **完整扫码加号与任务管理**：直接在 Web 面板微信/QQ 扫码添加账号，自动每日签到、猫猫旅行、领奖与日志持久化；
+- 🔄 **单仓库一键更新**：管理端与上游均跟随本仓库（`amnssb/workbuddyweb`）发布，Web 面板内一键升级，更新包经签名验证后热替换；
+- 🛡️ **非 root 运行**：容器内以 `app:10001` 用户执行，数据库与日志目录权限预置，降低特权逃逸风险。
 
 ---
 
@@ -125,8 +127,14 @@ docker compose -f docker-compose.separate.yml up -d --build
    - 绑定的账号版本（国内版 CN / 国际版 Global）
    - IP 白名单 / 最大同时请求 IP 数
    - 模型调用白名单
-   - Token 配额限额
+   - Token 配额 / 积分额度（任一超限即拒绝）
 3. 生成的 Key（形如 `wbk_xxxxxxxx`）即作为下游调用的 Bearer Token。
+
+### 4. 版本升级
+管理端与上游均跟随本仓库发布，Web 面板「系统更新」页面一键升级：
+- **管理端更新**：下载 Release 更新包（tar.gz + .sig），经签名公钥验证后热替换后端与前端产物，自动重启服务；
+- **上游更新**：在仓库工作区拉取最新代码，docker compose 重建容器；
+- 更新包签名验证使用 `deploy/release-signing-key.pub`，私钥离线保管，未配置公钥时拒绝自动更新（默认安全）。
 
 ---
 
@@ -185,8 +193,8 @@ workbuddyweb/
 ├── Dockerfile.wb2api           # 独立构建 workbuddy2api 镜像
 ├── .env.example                # 环境变量配置模板
 ├── deploy/                     # 一键更新器与部署模板
-│   ├── update.py               # 更新执行脚本
-│   ├── release-signing-key.pub # 发布包签名公钥
+│   ├── update.py               # 更新执行脚本（单仓库模型，管理端与上游均跟随本仓库）
+│   ├── release-signing-key.pub # 发布包签名公钥（未配置时拒绝自动更新）
 │   ├── verify-release.sh       # 签名验证脚本
 │   └── windows-native/         # Windows 原生运行批处理模板
 │       ├── start-workbuddy2api.cmd
@@ -214,15 +222,33 @@ workbuddyweb/
 
 ## ⚙️ 环境变量配置参考 (`.env`)
 
+### 基础配置
+
 | 变量名 | 默认值 | 作用说明 |
 |---|---|---|
 | `PORT` | `7864` | 对外暴露的宿主机服务端口 |
 | `WB_ADMIN_PASSWORD` | *(空)* | 首次启动初始管理员密码（留空则随机生成并打印在日志中） |
 | `WB_TRUST_PROXY` | `1` | 信任前置反向代理（Nginx/1Panel 等）透传的真实客户端 IP |
 | `WB_ENABLE_DOCS` | `0` | 是否在生产环境暴露 `/docs` OpenAPI 接口文档 |
+| `WB_SESSION_DAYS` | `1` | 会话登录有效期（天），滑动续期 |
 | `TZ` | `Asia/Shanghai` | 容器时区设置 |
+
+### 网关与审计
+
+| 变量名 | 默认值 | 作用说明 |
+|---|---|---|
+| `WB_GATEWAY_MAX_BODY_MB` | `32` | 网关请求体上限（MB），足够容纳常见长上下文与附件 |
+| `WB_GATEWAY_RATE_PER_MIN` | `120` | 单 IP 每分钟最大请求数（`0` = 不限制） |
+| `WB_AUDIT_ALL_ACCESS` | `0` | 设为 `1` 时恢复全量访问日志记录（默认只记录异常访问） |
+| `WB_UPSTREAM_TIMEOUT` | `120` | 上游请求超时（秒），长推理场景可调大 |
+
+### 镜像构建加速
+
+| 变量名 | 默认值 | 作用说明 |
+|---|---|---|
 | `GOPROXY` | *(空)* | 镜像构建时的 Go 代理，国内可设为 `https://goproxy.cn,direct` |
 | `PIP_INDEX_URL` | *(空)* | 镜像构建时的 PyPI 源，国内可设为 `https://pypi.tuna.tsinghua.edu.cn/simple` |
+| `DEBIAN_MIRROR` | *(空)* | 镜像构建时的 Debian 源，国内可设为 `mirrors.aliyun.com` |
 
 ---
 
