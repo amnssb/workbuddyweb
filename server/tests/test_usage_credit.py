@@ -352,6 +352,32 @@ class CreditRecording(unittest.TestCase):
         row = db.query_one('SELECT credit FROM usage_daily')
         self.assertAlmostEqual(float(row['credit']), 5.0, places=6)
 
+    def test_backfill_fills_credit_only_gap(self) -> None:
+        """请求数/token 已正确，只有 credit 缺失时，修复统计要把 credit 补上。
+
+        场景：老日志本来没记 credit，上游开始返回 credit 后，usage_daily 里
+        的行 requests/tokens 是对的但 credit 为 0。此前 backfill 因前三项
+        没有缺口而直接跳过，导致 credit 永远补不上。
+        """
+        import time as _time
+        # 先写一条带 credit 的日志
+        db.add_request_log(
+            ts=int(_time.time()), key_id=1, ip='1.2.3.4', model='glm-5.2',
+            mapped_model='glm-5.2', status=200, prompt_tokens=100,
+            completion_tokens=50, latency_ms=10, first_token_ms=None,
+            ua='ua', error=None, stream=0, credit=2.5, realm='cn',
+        )
+        # 再手动造一个「只有 credit 缺」的 usage_daily 行
+        db.execute(
+            'INSERT INTO usage_daily(day, key_id, model, requests, prompt_tokens, '
+            'completion_tokens, credit, realm) VALUES(?, ?, ?, 1, 100, 50, 0, ?)',
+            (db.day_of(), 1, 'glm-5.2', 'cn'),
+        )
+        out = db.backfill_usage_from_logs()
+        self.assertGreater(out['credit'], 0, 'credit 缺口没被回填')
+        row = db.query_one('SELECT credit FROM usage_daily')
+        self.assertAlmostEqual(float(row['credit']), 2.5, places=6)
+
 
 if __name__ == '__main__':
     unittest.main()

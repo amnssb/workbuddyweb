@@ -342,6 +342,20 @@ class UsageHealthTest(unittest.TestCase):
         self.assertTrue(stats._usage_health(db.day_of(), 0, 'global')['ok'],
                         'NULL 不该算进国际版')
 
+    def test_null_realm_history_does_not_flag_global(self) -> None:
+        """**核心回归**：历史 NULL 记录只看国际版时不能触发误报。
+
+        旧实现写成 `COALESCE(realm, ?) = ?`，查询 global 时把 NULL 兜成 global，
+        于是国内版历史记录会被算进国际版流量，导致「国际版有调用但统计为 0」
+        的假报警。
+        """
+        db.execute('INSERT INTO request_logs(ts,key_id,model,status,realm,'
+                   'prompt_tokens,completion_tokens) VALUES(?,?,?,?,?,?,?)',
+                   (int(db.time.time()), 1, 'm', 200, None, 10, 5))
+        h = stats._usage_health(db.day_of(), 0, 'global')
+        self.assertTrue(h['ok'], f'NULL 历史记录不应误报国际版：{h}')
+        self.assertEqual(h['detail'], '')
+
     def test_rejected_calls_do_not_trigger_the_warning(self) -> None:
         """**反误报**：只发生被拒绝的调用时不该报警。
 

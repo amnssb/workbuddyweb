@@ -949,18 +949,22 @@ def backfill_usage_from_logs() -> dict:
     }
 
     fixed = 0
-    added_requests = added_tokens = 0
+    added_requests = added_tokens = added_credit = 0.0
     for row in expected:
         key = (row['day'], row['key_id'], row['model'], row['realm'] or 'cn')
         cur = current.get(key)
         cur_req = int(cur['requests']) if cur else 0
         cur_pt = int(cur['prompt_tokens']) if cur else 0
         cur_ct = int(cur['completion_tokens']) if cur else 0
+        cur_cr = float(cur['credit'] or 0) if cur else 0.0
 
         d_req = int(row['requests']) - cur_req
         d_pt = int(row['pt']) - cur_pt
         d_ct = int(row['ct']) - cur_ct
-        if d_req <= 0 and d_pt <= 0 and d_ct <= 0:
+        d_cr = float(row['cr'] or 0) - cur_cr
+        # 请求数 / token / 扣费任一项有缺口才需要回填；credit 可能单独缺失
+        # （例如老日志没有记录 usage.credit，后来才补上）。
+        if d_req <= 0 and d_pt <= 0 and d_ct <= 0 and d_cr <= 0:
             continue
         execute(
             'INSERT INTO usage_daily(day, key_id, model, requests, prompt_tokens, completion_tokens, credit, realm) '
@@ -977,11 +981,13 @@ def backfill_usage_from_logs() -> dict:
         fixed += 1
         added_requests += max(0, d_req)
         added_tokens += max(0, d_pt) + max(0, d_ct)
+        added_credit += max(0.0, d_cr)
 
     return {
         'repaired': fixed,
         'requests': added_requests,
         'tokens': added_tokens,
+        'credit': added_credit,
     }
 
 

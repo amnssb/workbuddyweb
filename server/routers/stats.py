@@ -189,8 +189,9 @@ def _usage_health(today: str, today_requests: int, realm: str | None = None) -> 
     改文案时前端静默失效、译文形同虚设）。
     """
     try:
-        # 与用量同一口径：看某版本时只看该版本（COALESCE 把历史 NULL 归 cn）
-        rgt = ' AND COALESCE(realm, ?) = ?' if realm in ('cn', 'global') else ''
+        # 与用量同一口径：看某版本时只看该版本（历史 NULL 固定归 cn，不能把 NULL
+        # 兜成「当前查询的版本」——否则看国际版时国内版历史记录会被误算进来）。
+        rgt = " AND COALESCE(realm, 'cn') = ?" if realm in ('cn', 'global') else ''
         # 只数「本该累计」的：与 _record 的 `if key:` 且 `if total or credit:` 对齐
         should = (
             'key_id IS NOT NULL'
@@ -206,7 +207,7 @@ def _usage_health(today: str, today_requests: int, realm: str | None = None) -> 
             f'SELECT COUNT(*) AS c FROM request_logs '
             f'WHERE ts >= ? AND ts < ? AND {should}{rgt}',
             (db.day_start_ts(today), db.day_start_ts(today) + 86400)
-            + (('cn', realm) if rgt else ()),
+            + ((realm,) if rgt else ()),
         )
         n = int(logs_today['c']) if logs_today else 0
     except Exception:  # noqa: BLE001
