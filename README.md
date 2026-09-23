@@ -12,6 +12,8 @@
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](web/)
 [![License](https://img.shields.io/badge/License-MIT-22c55e)](LICENSE)
 
+[简体中文](README.md) · [English](README.en.md)
+
 </div>
 
 ---

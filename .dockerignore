@@ -9,7 +9,7 @@ __pycache__
 *.pyo
 *.pyd
 .Python
-node_modules
+web/node_modules
 .next
 .DS_Store
 Thumbs.db

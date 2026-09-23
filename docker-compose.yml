@@ -22,21 +22,23 @@ services:
       - WB_TRUST_PROXY=1
       # 生产环境隐藏 /docs 接口文档（设为 1 则开启）
       - WB_ENABLE_DOCS=0
+      # 仓库工作区挂载点（一键更新上游时 git pull 在此执行）
+      - WB_UPSTREAM_DIR=/app/repo
     ports:
       # 映射管理面板与 API 统一服务端口
       # 访问控制台: http://<IP>:7864
       # 下游 OpenAI SDK: http://<IP>:7864/v1
-      - "${PORT:-7864}:7864"
+      # 管理端持有全部账号凭据，默认只监听本机 127.0.0.1，避免直接暴露公网。
+      # 需要外网访问时，请前置 Nginx / 1Panel 等反向代理并开启 HTTPS。
+      - "127.0.0.1:${PORT:-7864}:7864"
     volumes:
       # 持久化数据：管理端数据库、用量统计、用户数据与运行时配置
       # 注意：若容器内进程写 ./data 报权限错，先 chown -R 10001:10001 ./data
       - ./data:/app/data
       # 账号凭据目录：保存扫码添加的账号 JSON 文件
       - ./auths:/app/auths
-      # ── 可选：容器内一键更新（跟随本仓库）────────────────────
-      # 默认不启用。启用后管理端可在界面里 git pull 本仓库并
-      # docker compose up -d --build 重建容器（与宿主部署能力对齐）：
-      # - ./:/app/repo            # 仓库工作区（git pull 在此执行）
-      # - /var/run/docker.sock:/var/run/docker.sock
-      # 启用时同时设置环境变量 WB_UPSTREAM_DIR=/app/repo。
-      # 不启用则更新上游请到宿主机执行：git pull && docker compose up -d --build
+      # ── 容器内一键更新（跟随本仓库）────────────────────────────
+      # 挂 docker.sock 后容器内可 docker compose 重建自身，能力上与宿主部署对齐。
+      # 若不需要此功能，可注释掉下面两条；届时界面会提示用户到宿主机手动更新。
+      - ./:/app/repo            # 仓库工作区（git pull 在此执行）
+      - /var/run/docker.sock:/var/run/docker.sock

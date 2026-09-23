@@ -44,6 +44,26 @@ RUN set -eu; \
         bash \
     && rm -rf /var/lib/apt/lists/*
 
+# 安装 Docker CLI + compose v2 插件，使容器内一键更新上游可用。
+# 必须锁死 compose v2：v5 起 `up --build` 依赖外部 buildx 插件，而本镜像没有 buildx。
+ARG DOCKER_VERSION=27.5.1
+ARG COMPOSE_VERSION=v2.35.0
+ARG TARGETARCH
+RUN set -eu; \
+    case "$TARGETARCH" in \
+        amd64|x86_64) DOCKER_ARCH=x86_64 ;; \
+        arm64|aarch64) DOCKER_ARCH=aarch64 ;; \
+        arm|armv7|armv7l) DOCKER_ARCH=armv7 ;; \
+        *) echo "不支持的架构: $TARGETARCH"; exit 1 ;; \
+    esac; \
+    mkdir -p /usr/local/lib/docker/cli-plugins; \
+    curl -fsSL "https://download.docker.com/linux/static/stable/${DOCKER_ARCH}/docker-${DOCKER_VERSION}.tgz" \
+        | tar -xz -C /usr/local/bin --strip-components=1 docker/docker; \
+    curl -fsSL "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-linux-${DOCKER_ARCH}" \
+        -o /usr/local/lib/docker/cli-plugins/docker-compose; \
+    chmod +x /usr/local/lib/docker/cli-plugins/docker-compose; \
+    docker compose version
+
 WORKDIR /app
 
 # 安装 Python 依赖
@@ -76,11 +96,14 @@ COPY config.default.json /app/config.default.json
 COPY scripts/ /app/scripts/
 COPY entrypoint.sh /app/entrypoint.sh
 
-# 统一换行符并添加可执行权限
+# 统一换行符并添加可执行权限，创建非 root 运行用户
 RUN set -eu; \
     sed -i 's/\r$//' /app/entrypoint.sh /app/scripts/*.sh /app/scripts/*.py 2>/dev/null || true; \
     chmod +x /app/entrypoint.sh /app/scripts/*.sh /app/scripts/*.py /app/bin/*; \
-    mkdir -p /app/data /app/auths
+    mkdir -p /app/data /app/auths; \
+    groupadd -r app -g 10001 || true; \
+    useradd -r -u 10001 -g app -d /app -s /sbin/nologin app || true; \
+    chown -R app:app /app/data /app/auths
 
 # 默认运行环境变量
 ENV PYTHONUNBUFFERED=1 \
@@ -105,6 +128,8 @@ ENV PYTHONUNBUFFERED=1 \
 VOLUME ["/app/data", "/app/auths"]
 
 EXPOSE 7864
+
+USER app
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -fsS http://127.0.0.1:7864/api/healthz || exit 1

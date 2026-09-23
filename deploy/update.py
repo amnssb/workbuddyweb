@@ -251,10 +251,11 @@ def update_manager(rep) -> None:
         if src.is_dir():
             shutil.rmtree(dst, ignore_errors=True)
             shutil.copytree(src, dst)
-    for fname in ('.version', 'CHANGELOG.md'):
-        src = new_root / fname
+    # 同步文档与版本文件（发布链路要求带上英文版 README）
+    for name in ('.version', 'CHANGELOG.md', 'README.md', 'README.en.md'):
+        src = new_root / name
         if src.is_file():
-            shutil.copyfile(src, INSTALL_DIR / fname)
+            shutil.copyfile(src, INSTALL_DIR / name)
 
     req = INSTALL_DIR / 'server' / 'requirements.txt'
     if req.is_file() and req.read_text(encoding='utf-8').strip():

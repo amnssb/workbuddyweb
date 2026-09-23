@@ -38,7 +38,7 @@ jobs:
           cp -r server "$STAGE/"
           cp -r web/out "$STAGE/web-out-tmp" && mkdir -p "$STAGE/web" && mv "$STAGE/web-out-tmp" "$STAGE/web/out"
           cp -r deploy "$STAGE/"
-          cp CHANGELOG.md .version "$STAGE/"
+          cp README.md README.en.md CHANGELOG.md .version "$STAGE/"
           # 容器部署资产：用户下载发布包后应能直接容器部署，不能缺这两个文件
           cp Dockerfile docker-compose.yml "$STAGE/"
           echo "v${VER}" > "$STAGE/.version"
