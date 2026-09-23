@@ -37,6 +37,14 @@
   （`Sequential_Tasks_2`，+200c）」「完成 5 次有效对话（`Sequential_Tasks_3`，
   +300c）」两类，并修复了部分任务未激活时进度为空导致领奖上报不足的问题。
 
+- **版本检测指向 amnssb/workbuddyweb**：管理端版本检测默认查询你的仓库，
+  不再指向原版 ithtelab/workbuddy-manager（上游检测仍保留 Sliverkiss/workbuddy2api）。
+  如需覆盖，可设环境变量 `WB_MANAGER_REPO`。
+
+- **GitHub 预构建镜像**：推送 `v*` 标签或手动触发 workflow 时，自动构建
+  **amd64 + arm64** 双架构镜像并推送到 `ghcr.io/<你的用户名>/workbuddy-all-in-one`。
+  拉取命令：`docker pull ghcr.io/amnssb/workbuddy-all-in-one:latest`。
+
 ---
 
 ## [1.0.64] - 2026-09-22
