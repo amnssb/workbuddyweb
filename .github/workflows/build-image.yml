@@ -1,9 +1,8 @@
 name: Build and Push Docker Image
 
+# 注意：tag 触发的镜像构建与更新包发布统一在 release.yml 里完成，
+# 这里只保留手动触发，避免同一次打 tag 构建两遍镜像。
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       tag:

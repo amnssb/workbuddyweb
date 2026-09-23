@@ -1,0 +1,98 @@
+name: Release
+
+# 发版流程：打 tag（v*）后产出两样东西——
+#   1. 一键更新包（tar.gz）：管理端「更新管理端」下载它，验签后替换 server/ 与 web/out/；
+#   2. all-in-one 镜像（多架构）：与 build-image.yml 同口径。
+#
+# 签名信任链：私钥离线保管、不进仓库也不进 CI。因此本流程只产出未签名的包，
+# 维护者用离线私钥对 tar.gz 签名后，把 <包名>.sig 作为 Release 资产补传
+# （deploy/verify-release.sh 可手动校验）。缺 .sig 时用户侧一键更新会拒绝安装。
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/workbuddy-all-in-one
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: 组装发布目录
+        run: |
+          set -euo pipefail
+          VER="${GITHUB_REF_NAME#v}"
+          STAGE="release/workbuddy-manager-${VER}"
+          mkdir -p "$STAGE"
+          # 更新包内容：管理端后端 + 前端静态产物 + 更新器与信任锚 + 版本与日志
+          cp -r server "$STAGE/"
+          cp -r web/out "$STAGE/web-out-tmp" && mkdir -p "$STAGE/web" && mv "$STAGE/web-out-tmp" "$STAGE/web/out"
+          cp -r deploy "$STAGE/"
+          cp CHANGELOG.md .version "$STAGE/"
+          # 容器部署资产：用户下载发布包后应能直接容器部署，不能缺这两个文件
+          cp Dockerfile docker-compose.yml "$STAGE/"
+          echo "v${VER}" > "$STAGE/.version"
+
+      - name: 打包更新包
+        run: |
+          set -euo pipefail
+          VER="${GITHUB_REF_NAME#v}"
+          tar -czf "workbuddy-manager-${VER}.tar.gz" -C release "workbuddy-manager-${VER}"
+          ls -lh "workbuddy-manager-${VER}.tar.gz"
+
+      - name: 创建 Release 并上传更新包
+        uses: softprops/action-gh-release@v2
+        with:
+          files: workbuddy-manager-*.tar.gz
+          body: |
+            一键更新包（管理端后端 + 前端 + 更新器）。
+
+            ⚠️ 签名：本流程不接触私钥。维护者请用离线私钥执行
+            `ssh-keygen -Y sign -f <私钥> -n file workbuddy-manager-*.tar.gz`，
+            然后把生成的 `.tar.gz.sig` 作为本 Release 的资产补传。
+            缺 `.sig` 时，用户侧一键更新会拒绝安装（默认安全）。
+
+      # ── 多架构镜像（与 build-image.yml 同口径）──
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=tag
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

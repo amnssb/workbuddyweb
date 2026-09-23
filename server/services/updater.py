@@ -386,10 +386,12 @@ def tail_log(lines: int = 80) -> str:
 # 避免每次打开页面都去请求；用户可手动强制刷新。
 _VERSION_CACHE_FILE = config.DATA_DIR / 'version-check.json'
 VERSION_CACHE_TTL = 6 * 3600          # 6 小时
-UPSTREAM_API_REPO = os.environ.get('WB_UPSTREAM_API_REPO') or 'Sliverkiss/workbuddy2api'
-# 管理端仓库（owner/name），用于查询最新 Release
+# 单仓库模型：管理端后端（server/）、上游 Go 网关（upstream/）与前端静态产物
+# （web/out）都在**同一个仓库**里，版本检测与一键更新统一跟随它——不再区分
+# 「管理端仓库 + 上游仓库」（旧双仓库模型里上游是独立仓库
+# Sliverkiss/workbuddy2api；合并为 all-in-one 后上游代码在本仓库 upstream/
+# 目录，镜像与更新包都由本仓库的 CI 产出）。fork 部署可用环境变量指向自己的仓库。
 MANAGER_REPO = os.environ.get('WB_MANAGER_REPO') or 'amnssb/workbuddyweb'
-_upstream_api_repo_cache: str | None = None
 
 
 def _gh_get(url: str, timeout: int = 15) -> object:
@@ -401,33 +403,37 @@ def _gh_get(url: str, timeout: int = 15) -> object:
         return json.loads(resp.read().decode('utf-8'))
 
 
-def _upstream_api_slug() -> str:
-    """把上游仓库地址归一化为 owner/name（用于 GitHub API）。"""
-    global _upstream_api_repo_cache
-    if _upstream_api_repo_cache:
-        return _upstream_api_repo_cache
-    slug = UPSTREAM_API_REPO
-    raw = (os.environ.get('WB_UPSTREAM_REPO') or '').strip()
+def _repo_slug() -> str:
+    """把仓库地址归一化为 owner/name（用于 GitHub API）。
+
+    默认跟随 MANAGER_REPO；若显式给了完整仓库 URL（如 fork 后 clone 的地址），
+    则从中解析 owner/name。
+    """
+    raw = (os.environ.get('WB_REPO_URL') or os.environ.get('WB_UPSTREAM_REPO') or '').strip()
     m = re.search(r'github\.com[:/]+([^/]+)/([^/]+?)(?:\.git)?/?$', raw)
     if m:
-        slug = f'{m.group(1)}/{m.group(2)}'
-    _upstream_api_repo_cache = slug
-    return slug
+        return f'{m.group(1)}/{m.group(2)}'
+    return MANAGER_REPO
 
 
 def _local_upstream_head(full: bool = False) -> str:
-    """本地上游仓库当前的 commit。
+    """本地仓库当前的 commit（上游与管理端同仓库，同一个 HEAD）。
 
     full=True 返回完整 sha（GitHub compare API 用完整 sha 更稳，短 sha 偶发 404）。
+    优先在上游目录取（宿主 git clone 部署）；上游目录不是 git 仓库时
+    （容器部署，代码打进镜像）回退到安装目录。
     """
-    try:
-        proc = subprocess.run(['git', 'rev-parse', 'HEAD'],
-                              cwd=str(_upstream_dir()), capture_output=True, text=True, timeout=10)
-        if proc.returncode == 0:
-            sha = proc.stdout.strip()
-            return sha if full else sha[:8]
-    except Exception:  # noqa: BLE001
-        pass
+    for cwd in (_upstream_dir(), config.ROOT):
+        try:
+            if not (cwd / '.git').exists():
+                continue
+            proc = subprocess.run(['git', 'rev-parse', 'HEAD'],
+                                  cwd=str(cwd), capture_output=True, text=True, timeout=10)
+            if proc.returncode == 0:
+                sha = proc.stdout.strip()
+                return sha if full else sha[:8]
+        except Exception:  # noqa: BLE001
+            continue
     return ''
 
 
@@ -528,16 +534,22 @@ def _write_cache(data: dict) -> None:
 
 
 def _fetch_remote_versions() -> dict:
-    """向 GitHub 查询管理端与上游的最新版本（不做缓存判断）。"""
+    """向 GitHub 查询本仓库的最新 Release 与默认分支最新提交（不做缓存判断）。
+
+    单仓库模型下管理端与上游都来自同一个仓库：
+      · 管理端更新包 = 仓库 Release 资产（CI 产出并签名）；
+      · 上游更新 = 仓库默认分支的最新提交（git pull 或 compare 展示）。
+    """
     result: dict = {
         'checked_at': int(time.time()),
         'manager': {'latest': '', 'url': '', 'error': ''},
         'upstream': {'latest': '', 'date': '', 'subject': '', 'error': ''},
     }
+    slug = _repo_slug()
 
     # 管理端：最新 Release
     try:
-        rel = _gh_get(f'https://api.github.com/repos/{MANAGER_REPO}/releases/latest')
+        rel = _gh_get(f'https://api.github.com/repos/{slug}/releases/latest')
         if isinstance(rel, dict):
             result['manager']['latest'] = str(rel.get('tag_name') or '')
             result['manager']['url'] = str(rel.get('html_url') or '')
@@ -546,11 +558,10 @@ def _fetch_remote_versions() -> dict:
     except Exception as exc:  # noqa: BLE001
         result['manager']['error'] = str(exc)[:120]
 
-    # 上游：默认分支最新提交
-    slug = _upstream_api_slug()
+    # 上游：同一仓库默认分支最新提交
     try:
         repo = _gh_get(f'https://api.github.com/repos/{slug}')
-        branch = (repo.get('default_branch') if isinstance(repo, dict) else '') or 'master'
+        branch = (repo.get('default_branch') if isinstance(repo, dict) else '') or 'main'
         commits = _gh_get(f'https://api.github.com/repos/{slug}/commits?sha={branch}&per_page=1')
         if isinstance(commits, list) and commits:
             c = commits[0]
@@ -620,7 +631,7 @@ def check_updates(force: bool = False) -> dict:
             'changes': cache.get('upstream', {}).get('changes') or [],
             'truncated': bool(cache.get('upstream', {}).get('truncated')),
             'error': str(cache.get('upstream', {}).get('error') or ''),
-            'repo': _upstream_api_slug(),
+            'repo': _repo_slug(),
         },
         'has_any': manager_has or upstream_has,
     }

@@ -29,6 +29,14 @@ services:
       - "${PORT:-7864}:7864"
     volumes:
       # 持久化数据：管理端数据库、用量统计、用户数据与运行时配置
+      # 注意：若容器内进程写 ./data 报权限错，先 chown -R 10001:10001 ./data
       - ./data:/app/data
       # 账号凭据目录：保存扫码添加的账号 JSON 文件
       - ./auths:/app/auths
+      # ── 可选：容器内一键更新（跟随本仓库）────────────────────
+      # 默认不启用。启用后管理端可在界面里 git pull 本仓库并
+      # docker compose up -d --build 重建容器（与宿主部署能力对齐）：
+      # - ./:/app/repo            # 仓库工作区（git pull 在此执行）
+      # - /var/run/docker.sock:/var/run/docker.sock
+      # 启用时同时设置环境变量 WB_UPSTREAM_DIR=/app/repo。
+      # 不启用则更新上游请到宿主机执行：git pull && docker compose up -d --build
