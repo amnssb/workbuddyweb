@@ -54,11 +54,21 @@ class InternalHostRejectionTest(unittest.TestCase):
             )
 
     def test_allowed_hosts(self) -> None:
-        for h in self.ALLOWED:
-            self.assertIsNone(
-                wb2api._reject_internal_host(h),
-                f'{h} 是合法目标，不应被拦（否则自建/第三方 Redis 会被误伤）',
-            )
+        import socket
+        real_getaddrinfo = socket.getaddrinfo
+
+        def mock_getaddrinfo(h, port, *args, **kwargs):
+            # 隔离本地代理 Fake-IP / TUN 对 DNS 解析的干扰，返回标准公网 IP
+            if 'upstash' in str(h) or 'example.com' in str(h):
+                return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('104.18.1.1', 0))]
+            return real_getaddrinfo(h, port, *args, **kwargs)
+
+        with mock.patch('socket.getaddrinfo', side_effect=mock_getaddrinfo):
+            for h in self.ALLOWED:
+                self.assertIsNone(
+                    wb2api._reject_internal_host(h),
+                    f'{h} 是合法目标，不应被拦（否则自建/第三方 Redis 会被误伤）',
+                )
 
     def test_empty_host_rejected(self) -> None:
         self.assertIsNotNone(wb2api._reject_internal_host(''))
@@ -123,7 +133,15 @@ class TestUpstashEndpointTest(unittest.TestCase):
                 sent.append(u)
                 return _Resp()
 
-        with mock.patch.object(config, 'http_client', _Client):
+        import socket
+
+        def mock_gai(h, port, *args, **kwargs):
+            if 'upstash' in str(h):
+                return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('104.18.1.1', 0))]
+            return socket.getaddrinfo(h, port, *args, **kwargs)
+
+        with mock.patch.object(config, 'http_client', _Client), \
+             mock.patch('socket.getaddrinfo', side_effect=mock_gai):
             ok, msg = asyncio.run(wb2api.test_upstash('https://us1-abc.upstash.io', 'tok'))
         self.assertTrue(ok, msg)
         self.assertEqual(len(sent), 1, '公网地址应正常探测')

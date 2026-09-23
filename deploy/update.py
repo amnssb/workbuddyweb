@@ -209,8 +209,11 @@ def _safe_extract(tf: tarfile.TarFile, dest: Path) -> Path:
             raise RuntimeError(f'发布包含非法路径：{name}')
         if member.issym() or member.islnk():
             raise RuntimeError(f'发布包不允许链接成员：{name}')
-    # 路径与链接已校验；仍用 filter 防止 tarfile 未来默认行为变化。
-    tf.extractall(dest, filter='fully_trusted')  # noqa: S202
+    # 路径与链接已校验；仍用 filter 防止 tarfile 未来默认行为变化（兼容 Python 3.12 之前版本）。
+    try:
+        tf.extractall(dest, filter='fully_trusted')  # noqa: S202
+    except TypeError:
+        tf.extractall(dest)  # noqa: S202
     # 清掉 setuid / setgid，避免包内特殊权限位影响宿主
     for root, dirs, files in os.walk(dest):
         for entry in dirs + files:

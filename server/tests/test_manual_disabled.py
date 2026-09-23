@@ -43,11 +43,6 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-# Guard: this repository keeps only built frontend artifacts (web/out), not source files.
-# When source is absent, skip frontend-source-level tests rather than failing on FileNotFoundError.
-_WEB_ROOT_FOR_GUARD = Path(__file__).resolve().parents[2] / 'web'
-if not (_WEB_ROOT_FOR_GUARD / 'components').is_dir():
-    raise unittest.SkipTest('web/ source not present; only web/out artifacts are tracked')
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -269,6 +264,11 @@ class StatusPassthroughTest(unittest.TestCase):
 
 class FrontendContractTest(unittest.TestCase):
     """前端契约（TS 侧无法在这里跑，故按源码断言关键结构，防回归）。"""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        if not (ROOT / 'web' / 'components').is_dir():
+            raise unittest.SkipTest('web/ source not present; only web/out artifacts are tracked')
 
     def _read(self, rel: str) -> str:
         return (ROOT / rel).read_text(encoding='utf-8')
@@ -492,6 +492,8 @@ class AdminSectionEditableTest(unittest.TestCase):
         文案必须讲清「开与不开分别会怎样」——用户在账号页点停用时看到的提示
         会随这个开关变化，不说清楚会以为是 bug。
         """
+        if not (ROOT / 'web' / 'components').is_dir():
+            raise unittest.SkipTest('web/ source not present; only web/out artifacts are tracked')
         src = (ROOT / 'web/app/(main)/settings/page.tsx').read_text(encoding='utf-8')
         self.assertIn('ADMIN_FIELDS', src)
         self.assertIn("id: 'admin'", src)

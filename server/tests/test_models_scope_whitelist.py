@@ -31,11 +31,6 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-# Guard: this repository keeps only built frontend artifacts (web/out), not source files.
-# When source is absent, skip frontend-source-level tests rather than failing on FileNotFoundError.
-_WEB_ROOT_FOR_GUARD = Path(__file__).resolve().parents[2] / 'web'
-if not (_WEB_ROOT_FOR_GUARD / 'components').is_dir():
-    raise unittest.SkipTest('web/ source not present; only web/out artifacts are tracked')
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -390,6 +385,12 @@ class CachedIdsTest(unittest.TestCase):
 
 class HintFrontendWiringTest(unittest.TestCase):
     """前端要真的显示这个提示，且「查不了」不能显示成「全部正确」。"""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        web_root = Path(__file__).resolve().parents[2] / 'web'
+        if not (web_root / 'components').is_dir():
+            raise unittest.SkipTest('web/ source not present; only web/out artifacts are tracked')
 
     def _page(self) -> str:
         return (Path(__file__).resolve().parents[2]

@@ -144,13 +144,19 @@ class MigrationTest(unittest.TestCase):
     def tearDown(self) -> None:
         from server import config, db
         if db._conn is not None:
-            db._conn.close()
+            try:
+                db._conn.close()
+            except Exception:
+                pass
         db._conn = None
-        config.DB_PATH = self._orig
+        if hasattr(self, '_orig'):
+            config.DB_PATH = self._orig
+        import gc
+        gc.collect()
         # 连接关闭后 Windows 才允许删除；失败也不影响结论
         try:
             self._tmp.cleanup()
-        except PermissionError:
+        except (OSError, Exception):
             pass
 
     def _make_old_db(self) -> None:
@@ -167,8 +173,9 @@ class MigrationTest(unittest.TestCase):
         conn.execute('INSERT INTO request_logs(ts, latency_ms) VALUES(1, 1234)')
         conn.commit()
         conn.close()
-        cols = {r[1] for r in sqlite3.connect(
-            self._path).execute('PRAGMA table_info(request_logs)')}
+        check_conn = sqlite3.connect(self._path)
+        cols = {r[1] for r in check_conn.execute('PRAGMA table_info(request_logs)')}
+        check_conn.close()
         self.assertNotIn('first_token_ms', cols)
 
     def test_old_db_gains_column_and_keeps_rows(self) -> None:
@@ -176,6 +183,8 @@ class MigrationTest(unittest.TestCase):
         self._orig = config.DB_PATH
         self._make_old_db()
         config.DB_PATH = self._path
+        if db._conn is not None:
+            db._conn.close()
         db._conn = None
         db.connect()
 
@@ -191,6 +200,8 @@ class MigrationTest(unittest.TestCase):
         self._make_old_db()
         config.DB_PATH = self._path
         for _ in range(2):
+            if db._conn is not None:
+                db._conn.close()
             db._conn = None
             db.connect()  # 重复执行不能报错
         cols = [r[1] for r in db._conn.execute('PRAGMA table_info(request_logs)')]

@@ -1402,10 +1402,16 @@ _BLOCKED_HOSTNAMES = (
 )
 
 
+_FAKE_IP_NET = ipaddress.ip_network('198.18.0.0/15')
+
+
 def _is_internal_addr(addr: ipaddress._BaseAddress) -> bool:
     """回环 / 私有 / 链路本地（含云元数据 169.254.169.254）/ 保留 / 组播 / 未指定。"""
+    if isinstance(addr, ipaddress.IPv4Address) and addr in _FAKE_IP_NET:
+        return False
     return bool(addr.is_loopback or addr.is_private or addr.is_link_local
                 or addr.is_reserved or addr.is_multicast or addr.is_unspecified)
+
 
 
 def _reject_internal_host(host: str) -> str | None:
