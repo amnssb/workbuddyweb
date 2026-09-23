@@ -29,6 +29,14 @@ from __future__ import annotations
 import json
 import sys
 import unittest
+
+# Guard: this repository keeps only built frontend artifacts (web/out), not source files.
+# When source is absent, skip frontend-source-level tests rather than failing on FileNotFoundError.
+from pathlib import Path
+_WEB_ROOT_FOR_GUARD = Path(__file__).resolve().parents[2] / 'web'
+if not (_WEB_ROOT_FOR_GUARD / 'components').is_dir():
+    raise unittest.SkipTest('web/ source not present; only web/out artifacts are tracked')
+
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]

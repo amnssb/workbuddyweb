@@ -123,6 +123,13 @@ class StatsScopeTest(unittest.TestCase):
 class FrontendVisibilityRuleTest(unittest.TestCase):
     """前端据以判断的那个量必须来自 stats.total（而不是筛选结果）。"""
 
+    @classmethod
+    def setUpClass(cls) -> None:
+        root = Path(__file__).resolve().parents[2]
+        if not (root / 'web' / 'components').is_dir():
+            raise unittest.SkipTest(
+                'web/ source not present; only web/out artifacts are tracked')
+
     def _page(self) -> str:
         return (Path(__file__).resolve().parents[2] / 'web' / 'app' / '(main)'
                 / 'tasks' / 'page.tsx').read_text(encoding='utf-8')

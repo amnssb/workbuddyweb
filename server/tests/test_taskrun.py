@@ -599,8 +599,11 @@ class EventLoopResponsivenessTest(unittest.TestCase):
         若哪天有人在事件循环里误用同步版，心跳会掉到接近 0；本用例把这个
         差异钉住，免得「都改成 async」这个结论被无意改回去。
         """
-        ticks = self._heartbeat_during(
-            lambda: asyncio.to_thread(lambda: None), 0.0)  # 占位：正常情况
+        # 占位：确保事件循环至少跑一轮心跳，避免协程创建后立刻完成导致 ticks=0
+        async def _noop_with_yield():
+            await asyncio.sleep(0)
+
+        ticks = self._heartbeat_during(_noop_with_yield, 0.0)
         self.assertGreater(ticks, 0)
 
         async def call_sync() -> None:

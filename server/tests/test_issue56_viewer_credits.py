@@ -92,6 +92,9 @@ class CreditsRenderHonestyTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
+        if not (_ROOT / 'web' / 'components').is_dir():
+            raise unittest.SkipTest(
+                'web/ source not present; only web/out artifacts are tracked')
         cls.src = _PAGE.read_text(encoding='utf-8')
 
     def test_snapshot_has_its_own_badge(self) -> None:

@@ -184,6 +184,13 @@ workbuddyweb/
 ├── Dockerfile.manager          # 独立构建 Manager 镜像
 ├── Dockerfile.wb2api           # 独立构建 workbuddy2api 镜像
 ├── .env.example                # 环境变量配置模板
+├── deploy/                     # 一键更新器与部署模板
+│   ├── update.py               # 更新执行脚本
+│   ├── release-signing-key.pub # 发布包签名公钥
+│   ├── verify-release.sh       # 签名验证脚本
+│   └── windows-native/         # Windows 原生运行批处理模板
+│       ├── start-workbuddy2api.cmd
+│       └── stop-workbuddy2api.cmd
 ├── entrypoint.sh               # 容器引导脚本（初始化配置、启停管控）
 ├── scripts/
 │   ├── deploy.sh               # Linux 一键脚本
@@ -200,6 +207,8 @@ workbuddyweb/
 ```
 
 > ⚠️ **注意**：`data/` 与 `auths/` 目录中包含敏感的账号授权凭证与管理数据库，请**不要**将其提交到公共代码仓库！
+>
+> Windows 用户如需原生（非 Docker）运行上游网关，可参考 `deploy/windows-native/` 下的批处理模板。
 
 ---
 

@@ -41,6 +41,9 @@ class TodayOptionTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
+        if not (_ROOT / 'web' / 'components').is_dir():
+            raise unittest.SkipTest(
+                'web/ source not present; only web/out artifacts are tracked')
         cls.src = _PAGE.read_text(encoding='utf-8')
 
     def test_default_range_is_today(self) -> None:
@@ -74,6 +77,12 @@ class TodayOptionTest(unittest.TestCase):
 
 class TodayPhrasesTest(unittest.TestCase):
     """五语言都要有「今日」与「当日汇总」，不允许漏翻。"""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        if not (_ROOT / 'web' / 'components').is_dir():
+            raise unittest.SkipTest(
+                'web/ source not present; only web/out artifacts are tracked')
 
     def test_phrases_in_all_locales(self) -> None:
         import json

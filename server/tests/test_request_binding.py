@@ -124,6 +124,13 @@ class FrontendPostShapeTest(unittest.TestCase):
 
     API_TS = Path(__file__).resolve().parents[2] / 'web' / 'lib' / 'api.ts'
 
+    @classmethod
+    def setUpClass(cls) -> None:
+        root = Path(__file__).resolve().parents[2]
+        if not (root / 'web' / 'components').is_dir():
+            raise unittest.SkipTest(
+                'web/ source not present; only web/out artifacts are tracked')
+
     def test_post_helper_sends_json_body(self) -> None:
         api = self.API_TS.read_text(encoding='utf-8')
         # post 是箭头函数：const post = async <T>(url, body) => (await http.post(url, body)).data

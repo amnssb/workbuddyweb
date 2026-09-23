@@ -1,12 +1,18 @@
 # 更新日志
 
-## v1.0.65（未发布）
+## [未发布]
 
-- 重写更新逻辑为单仓库模型：管理端与上游统一跟随本仓库 `amnssb/workbuddyweb`。
-- 新增 `deploy/update.py` 更新执行器，补齐此前缺失的「一键更新」脚本。
-- 新增 Dockerfile 内 docker CLI + compose v2 插件，容器形态挂 `docker.sock` 后可一键更新上游。
-- 新增发布包签名信任锚（`deploy/release-signing-key.pub`、`deploy/verify-release.sh`）。
+### 新增
 
-## v1.0.64
+- 重写更新逻辑为单仓库模型：管理端与上游统一跟随本仓库。
+- 新增一键更新执行脚本，补齐管理端与上游的自动更新能力。
+- 容器镜像内预装 docker CLI 与 compose v2 插件，挂 docker.sock 后可在界面里一键更新上游。
+- 发布包增加签名验证信任锚与中英文文档同步。
 
-- 初始版本。
+---
+
+## [1.0.64] - 2026-09-23
+
+### 新增
+
+- 初始版本：all-in-one 融合部署版发布。

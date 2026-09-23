@@ -98,6 +98,12 @@ class DegradePassthroughTest(unittest.TestCase):
     本类锁住这两个字段如实透传，且缺省/异常输入不崩。
     """
 
+    @classmethod
+    def setUpClass(cls) -> None:
+        if not (_ROOT / 'web' / 'components').is_dir():
+            raise unittest.SkipTest(
+                'web/ source not present; only web/out artifacts are tracked')
+
     def _merge(self, pool_item: dict) -> dict:
         accounts = [{'uid': 'u1'}]
         wb2api.merge_pool_status(accounts, {'accounts': [dict(pool_item, uid='u1')]})
@@ -246,6 +252,12 @@ class RateLimitedModelsTest(unittest.TestCase):
       2. 台账已过期 → **不算**（快照可能过时，字段还在但窗口已过）；
       3. 缺 until / 非字符串 → 保守不算（宁可不报，也别报一个说不清时间的）。
     """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        if not (_ROOT / 'web' / 'components').is_dir():
+            raise unittest.SkipTest(
+                'web/ source not present; only web/out artifacts are tracked')
 
     def _src(self) -> str:
         return (_ROOT / 'web' / 'lib' / 'account-status.ts').read_text(encoding='utf-8')

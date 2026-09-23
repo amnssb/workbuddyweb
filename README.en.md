@@ -170,6 +170,13 @@ workbuddyweb/
 ├── Dockerfile.manager          # Standalone manager image
 ├── Dockerfile.wb2api           # Standalone gateway image
 ├── .env.example                # Environment variable template
+├── deploy/                     # Updater and deployment templates
+│   ├── update.py               # Update executor
+│   ├── release-signing-key.pub # Release package signing public key
+│   ├── verify-release.sh       # Signature verification script
+│   └── windows-native/         # Windows native batch templates
+│       ├── start-workbuddy2api.cmd
+│       └── stop-workbuddy2api.cmd
 ├── entrypoint.sh               # Container bootstrap script
 ├── scripts/
 │   ├── deploy.sh
@@ -186,6 +193,8 @@ workbuddyweb/
 ```
 
 > `data/` and `auths/` contain sensitive credentials. **Do not commit them to public repositories.**
+>
+> Windows users who want to run the upstream gateway natively (without Docker) can use the batch templates in `deploy/windows-native/`.
 
 ---
 

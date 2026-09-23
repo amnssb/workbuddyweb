@@ -541,8 +541,12 @@ class UpstreamPoolCountsTest(unittest.TestCase):
         后者会误伤两处**合法**用法：顶层汇总的 `upstream?.healthy`（老上游回退）
         与展示用的 `pool.healthy`。正向断言既精确又不会被无关代码绊倒。
         """
-        src = (Path(__file__).resolve().parents[2] / 'web' / 'app' / '(main)'
-               / 'dashboard' / 'page.tsx').read_text(encoding='utf-8')
+        root = Path(__file__).resolve().parents[2]
+        if not (root / 'web' / 'components').is_dir():
+            raise unittest.SkipTest(
+                'web/ source not present; only web/out artifacts are tracked')
+        src = (root / 'web' / 'app' / '(main)' / 'dashboard' / 'page.tsx'
+               ).read_text(encoding='utf-8')
         # 1) 真的读了上游按版本分组的计数
         self.assertIn('.realm_totals?.[realm]', src,
                       '仪表盘没有实际读 realm_totals —— 上游已按版本分好组，别自己数')
@@ -560,6 +564,9 @@ class UpstreamPoolCountsTest(unittest.TestCase):
             self.assertIsNone(re.search(pat, src), f'{why} —— 该字段不存在，会恒为 0')
 
     def test_type_declares_realm_totals(self) -> None:
-        ts = (Path(__file__).resolve().parents[2] / 'web' / 'lib' / 'types.ts'
-              ).read_text(encoding='utf-8')
+        root = Path(__file__).resolve().parents[2]
+        if not (root / 'web' / 'components').is_dir():
+            raise unittest.SkipTest(
+                'web/ source not present; only web/out artifacts are tracked')
+        ts = (root / 'web' / 'lib' / 'types.ts').read_text(encoding='utf-8')
         self.assertIn('realm_totals', ts, 'UpstreamStatus 类型缺 realm_totals')

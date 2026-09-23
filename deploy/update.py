@@ -194,15 +194,33 @@ def download_any(url: str, dest: Path) -> None:
         shutil.copyfileobj(resp, fh)
 
 
-def _safe_extract(pkg: Path, dest: Path) -> Path:
-    """解压并防路径穿越；返回包内唯一顶层目录。"""
+def _safe_extract(tf: tarfile.TarFile, dest: Path) -> Path:
+    """解压并防路径穿越；返回包内唯一顶层目录。
+
+    入参为已打开的 TarFile（便于测试直接传内存包），调用方负责关闭。
+    """
+    import stat as _stat
+
+    dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
-    with tarfile.open(pkg, 'r:gz') as tf:
-        for member in tf.getmembers():
-            name = member.name
-            if name.startswith('/') or '..' in Path(name).parts:
-                raise RuntimeError(f'发布包含非法路径：{name}')
-        tf.extractall(dest)  # noqa: S202 成员路径已逐一校验
+    for member in tf.getmembers():
+        name = member.name
+        if name.startswith('/') or '..' in Path(name).parts:
+            raise RuntimeError(f'发布包含非法路径：{name}')
+        if member.issym() or member.islnk():
+            raise RuntimeError(f'发布包不允许链接成员：{name}')
+    # 路径与链接已校验；仍用 filter 防止 tarfile 未来默认行为变化。
+    tf.extractall(dest, filter='fully_trusted')  # noqa: S202
+    # 清掉 setuid / setgid，避免包内特殊权限位影响宿主
+    for root, dirs, files in os.walk(dest):
+        for entry in dirs + files:
+            p = Path(root) / entry
+            try:
+                mode = p.stat().st_mode
+                if mode & (_stat.S_ISUID | _stat.S_ISGID):
+                    p.chmod(mode & ~(_stat.S_ISUID | _stat.S_ISGID))
+            except Exception:  # noqa: BLE001
+                pass
     tops = [p for p in dest.iterdir() if p.is_dir()]
     if len(tops) != 1:
         raise RuntimeError(f'发布包结构异常（顶层目录 {len(tops)} 个）')
@@ -235,7 +253,8 @@ def update_manager(rep) -> None:
 
     # 先验签、后解压：确认「包是我们签的」，再谈包里的内容
     verify_release_signature(pkg, sig_url, rep)
-    new_root = _safe_extract(pkg, work / 'extracted')
+    with tarfile.open(pkg, 'r:gz') as tf:
+        new_root = _safe_extract(tf, work / 'extracted')
 
     # 备份当前安装（出问题能回退），含 deploy/ 以便对照
     backup = INSTALL_DIR / f'backup-{time.strftime("%Y%m%d-%H%M%S")}'
